@@ -1,0 +1,9 @@
+###############
+## This project
+###############
+*.dll
+*.o
+*.obj
+*.so
+packages
+pubspec.lock
