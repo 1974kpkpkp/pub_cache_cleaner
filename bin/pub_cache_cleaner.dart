@@ -2,20 +2,20 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:pathos/path.dart' as pathos;
 
-void main() {
-  exit(new PubCacheCleaner().run());
+void main(List<String> args) {
+  exit(new PubCacheCleaner().run(args));
 }
 
 class PubCacheCleaner {
   static const SEPARATOR = '----------------------------------------';
-  
+
   bool _clean = false;
   bool _help = false;
   bool _displayTitleFoundApplication = true;
 
-  int run() {
-    _displayTitleFoundApplication = true;    
-    if(!_parseArguments()) {
+  int run(List<String> arguments) {
+    _displayTitleFoundApplication = true;
+    if(!_parseArguments(arguments)) {
       return -1;
     }
 
@@ -64,8 +64,8 @@ class PubCacheCleaner {
     var pubspecs = [];
     var links = new Set<String>();
     _findPubSpecs(homePath, new Set<String>(), pubspecs);
-    for(var pubspec in pubspecs) {      
-      var appPath = pathos.dirname(pubspec);      
+    for(var pubspec in pubspecs) {
+      var appPath = pathos.dirname(pubspec);
       links.addAll(_findLinksToPackages(appPath, cachePath));
     }
 
@@ -76,15 +76,15 @@ class PubCacheCleaner {
       }
     }
 
-    if(cached.length == 0) {      
-      _displayTitle('The package cache does not contain obsolete packages');      
+    if(cached.length == 0) {
+      _displayTitle('The package cache does not contain obsolete packages');
       return;
     }
 
     var sorted = cached.toList();
     sorted.sort((e1, e2) => e1.compareTo(e2));
-    if(!_clean) {      
-      _displayTitle('List of obsolete packages:');      
+    if(!_clean) {
+      _displayTitle('List of obsolete packages:');
       sorted.forEach((e) => stdout.writeln(e));
     } else {
       _displayTitle('List of removed packages:');
@@ -102,7 +102,7 @@ class PubCacheCleaner {
       }
     }
   }
-  
+
   void _displayTitle(String title) {
     stdout.writeln(SEPARATOR);
     stdout.writeln(title);
@@ -121,20 +121,20 @@ class PubCacheCleaner {
       if(FileSystemEntity.isDirectorySync(entryPath)) {
         if(pathos.basename(entryPath) == 'packages') {
           subdirs.add(entryPath);
-        }        
+        }
       }
-    }    
-    
+    }
+
     var links = [];
-    for(var subdir in subdirs) {      
+    for(var subdir in subdirs) {
       var entries = _listDirectory(subdir);
       for(var entry in entries) {
         var entryPath = entry.path;
         if(FileSystemEntity.isLinkSync(entryPath)) {
           var link = entry as Link;
           var targetPath = link.targetSync();
-          if(_isSubdir(cachePath, targetPath)) {            
-            if(pathos.basename(targetPath) == 'lib') {              
+          if(_isSubdir(cachePath, targetPath)) {
+            if(pathos.basename(targetPath) == 'lib') {
               links.add(pathos.dirname(targetPath));
             }
           }
@@ -151,7 +151,7 @@ class PubCacheCleaner {
     String pubspec = null;
     for(var entry in entries) {
       var entryPath = entry.path;
-      if(FileSystemEntity.isFileSync(entryPath)) {        
+      if(FileSystemEntity.isFileSync(entryPath)) {
         if(pathos.basename(entryPath) == 'pubspec.yaml') {
           pubspec = entryPath;
           break;
@@ -167,11 +167,11 @@ class PubCacheCleaner {
     }
 
     if(pubspec != null) {
-      if(_displayTitleFoundApplication) {        
-        _displayTitle('List of found applications:');        
-        _displayTitleFoundApplication = false;        
+      if(_displayTitleFoundApplication) {
+        _displayTitle('List of found applications:');
+        _displayTitleFoundApplication = false;
       }
-      
+
       pubspecs.add(pubspec);
       stdout.writeln(path);
     } else {
@@ -183,7 +183,7 @@ class PubCacheCleaner {
 
   String _getHomePath() {
     var home = Platform.environment['HOME'];
-    if(home != null) {      
+    if(home != null) {
       return pathos.normalize(home);
     } else {
       return null;
@@ -210,11 +210,11 @@ class PubCacheCleaner {
     return results;
   }
 
-  List<String> _getGitPackages(String cachePath) {    
+  List<String> _getGitPackages(String cachePath) {
     var gitPath = pathos.join(cachePath, 'git');
     var results = [];
     results.addAll(_getDirectories(gitPath));
-    results.remove(pathos.join(gitPath, 'cache'));    
+    results.remove(pathos.join(gitPath, 'cache'));
     return results;
   }
 
@@ -234,11 +234,11 @@ class PubCacheCleaner {
     if(pubCache != null) {
       return  pathos.normalize(pubCache);
     } else {
-      return pathos.join(homePath, '.pub-cache');      
+      return pathos.join(homePath, '.pub-cache');
     }
   }
 
-  bool _isSubdir(String dir, String subdir) {    
+  bool _isSubdir(String dir, String subdir) {
     var segments1 = pathos.split(dir);
     var segments2 = pathos.split(subdir);
     var length = segments1.length;
@@ -268,8 +268,7 @@ class PubCacheCleaner {
     return entries;
   }
 
-  bool _parseArguments() {
-    var arguments = new Options().arguments;
+  bool _parseArguments(List<String> arguments) {
     ArgResults argumentResults;
     var parser = new ArgParser();
     parser.addFlag('help', help: 'Display help');
