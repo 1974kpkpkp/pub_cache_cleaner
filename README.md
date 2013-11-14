@@ -17,4 +17,4 @@ The algorithm that used in this utility can described in short words as the foll
 4. Packages that exists in cache but never referenced in home directory considered as unreferenced.
 5. All packages without references considered as an unused packages because they not referensed nowhere outside.
 
-Running this utilty without parameters only show information about unused.
+Running this utilty without parameters only show information about unused packages.
