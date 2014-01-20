@@ -1,9 +1,9 @@
 pub_cache_cleaner
 =================
 
-Version: 0.0.3
+Version: 0.0.4
 
-Utility to clean the pub cache of obsolete packages.
+Utility to clean the pub cache from obsolete packages.
 
 This utility may be considered as safest way of removing unused packages from the packages cache. It are safer than you remove some packages manually.
 

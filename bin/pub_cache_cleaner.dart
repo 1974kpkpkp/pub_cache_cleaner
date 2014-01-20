@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:args/args.dart';
-import 'package:pathos/path.dart' as pathos;
+import 'package:path/path.dart' as pathos;
 
 void main(List<String> args) {
   exit(new PubCacheCleaner().run(args));
@@ -168,7 +168,7 @@ class PubCacheCleaner {
 
     if(pubspec != null) {
       if(_displayTitleFoundApplication) {
-        _displayTitle('List of found applications:');
+        _displayTitle('List of found packages:');
         _displayTitleFoundApplication = false;
       }
 
