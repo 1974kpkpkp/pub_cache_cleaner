@@ -1,7 +1,7 @@
 pub_cache_cleaner
 =================
 
-Version: 0.0.4
+Version: 0.0.5
 
 Utility to clean the pub cache from obsolete packages.
 
@@ -18,3 +18,7 @@ The algorithm that used in this utility can described in short words as the foll
 5. All packages without references considered as an unused packages because they not referensed nowhere outside.
 
 Running this utilty without parameters only show information about unused packages.
+
+IMPORTANT:
+
+Do not use this tool if you are using a Windows system, and you are not sure that your applications are located only in your home directory.

@@ -1,6 +1,7 @@
-import 'dart:io';
-import 'package:args/args.dart';
-import 'package:path/path.dart' as pathos;
+import "dart:io";
+import "package:args/args.dart";
+import "package:globbing/globbing.dart";
+import "package:file_utils/file_utils.dart";
 
 void main(List<String> args) {
   exit(new PubCacheCleaner().run(args));
@@ -10,97 +11,97 @@ class PubCacheCleaner {
   static const SEPARATOR = '----------------------------------------';
 
   bool _clean = false;
+
   bool _help = false;
-  bool _displayTitleFoundApplication = true;
 
   int run(List<String> arguments) {
-    _displayTitleFoundApplication = true;
-    if(!_parseArguments(arguments)) {
+    if (!_parseArguments(arguments)) {
       return -1;
     }
 
-    if(_help) {
+    if (_help) {
       return 0;
     }
 
-    if(!_checkOperatingSystem()) {
-      return _error('${_capitalize(Platform.operatingSystem)} operating system not supported');
+    var cachePath = _getPubCachePath();
+    var mask = "~/{.*,*}**";
+    mask = FilePath.expand(mask);
+    var glob = new Glob(mask);
+    if (!glob.match(cachePath)) {
+      return _error("pub cache is located outside of the home directory.");
     }
 
-    var homePath = _getHomePath();
-    if(homePath == null) {
-      return _error('Cannot determine home path');
-    }
-
-    var cachePath = _getPubCachePath(homePath);
-    if(!_isSubdir(homePath, cachePath)) {
-      return _error('pub cache is located outside of the home directory');
-    }
-
-    stdout.writeln('Please be patient. Search Dart applications may take awhile.');
-    _cleanOrList(homePath, cachePath);
+    stdout.writeln(
+        "Please be patient. Search Dart applications may take awhile.");
+    _cleanOrList(cachePath);
     return 0;
   }
 
-  String _capitalize(String name) {
-    if(name == null || name.isEmpty) {
-      return name;
-    }
-
-    return '${name[0].toUpperCase()}${name.substring(1)}';
-  }
-
-  bool _checkOperatingSystem() {
-    switch(Platform.operatingSystem) {
-      case 'linux':
-      case 'macos':
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  void _cleanOrList(String homePath, String cachePath) {
-    var pubspecs = [];
-    var links = new Set<String>();
-    _findPubSpecs(homePath, new Set<String>(), pubspecs);
-    for(var pubspec in pubspecs) {
-      var appPath = pathos.dirname(pubspec);
-      links.addAll(_findLinksToPackages(appPath, cachePath));
-    }
-
-    var cached = new Set<String>.from(_getCachedPackages(cachePath));
-    for(var link in links) {
-      if(cached.contains(link)) {
-        cached.remove(link);
-      }
-    }
-
-    if(cached.length == 0) {
-      _displayTitle('The package cache does not contain obsolete packages');
+  void _cleanOrList(String cachePath) {
+    var pubspecs = FileUtils.glob("~/**/pubspec.yaml");
+    if (pubspecs.isEmpty) {
+      _displayTitle("Dart applications not found.");
       return;
     }
 
-    var sorted = cached.toList();
+    // Remove cached packages from list
+    var cacheGlob = new Glob(cachePath + "/**");
+    var applications = new List<String>();
+    for (var pubspec in pubspecs) {
+      if (!cacheGlob.match(pubspec)) {
+        applications.add(pubspec);
+      }
+    }
+
+    _displayTitle("List of found applications:");
+    for (var application in applications) {
+      stdout.writeln(application);
+    }
+
+    var references = new Set<String>();
+    for (var application in applications) {
+      var appPath = FileUtils.dirname(application);
+      references.addAll(_findLinksToPackages(appPath, cacheGlob));
+    }
+
+    var cachedPackages = new Set<String>.from(_getCachedPackages(cachePath));
+    for (var reference in references) {
+      if (cachedPackages.contains(reference)) {
+        cachedPackages.remove(reference);
+      }
+    }
+
+    if (cachedPackages.length == 0) {
+      _displayTitle("The package cache does not contain obsolete packages");
+      return;
+    }
+
+    var sorted = cachedPackages.toList();
     sorted.sort((e1, e2) => e1.compareTo(e2));
-    if(!_clean) {
-      _displayTitle('List of obsolete packages:');
+    if (!_clean) {
+      _displayTitle("List of obsolete packages:");
       sorted.forEach((e) => stdout.writeln(e));
     } else {
-      _displayTitle('List of removed packages:');
-      for(var link in sorted) {
+      _displayTitle("List of removed packages:");
+      for (var link in sorted) {
         var dir = new Directory(link);
-        if(!dir.existsSync()) {
+        if (!dir.existsSync()) {
           continue;
         }
 
         try {
           dir.deleteSync(recursive: true);
           stdout.writeln(link);
-        } catch(exception) {
+        } catch (exception) {
         }
       }
+
+      _clearGitCache();
     }
+  }
+
+  void _clearGitCache() {
+    // Not implemented
   }
 
   void _displayTitle(String title) {
@@ -110,84 +111,26 @@ class PubCacheCleaner {
   }
 
   int _error(String message) {
-    stderr.writeln('Error: $message');
+    stderr.writeln("Error: $message");
     return -1;
   }
 
-  List<String> _findLinksToPackages(String appPath, String cachePath) {
-    var subdirs = [];
-    for(var entry in _listDirectory(appPath, recursive: true, followLinks: false)) {
-      var entryPath = entry.path;
-      if(FileSystemEntity.isDirectorySync(entryPath)) {
-        if(pathos.basename(entryPath) == 'packages') {
-          subdirs.add(entryPath);
-        }
-      }
-    }
-
+  List<String> _findLinksToPackages(String appPath, Glob cacheGlob) {
     var links = [];
-    for(var subdir in subdirs) {
-      var entries = _listDirectory(subdir);
-      for(var entry in entries) {
-        var entryPath = entry.path;
-        if(FileSystemEntity.isLinkSync(entryPath)) {
-          var link = entry as Link;
-          var targetPath = link.targetSync();
-          if(_isSubdir(cachePath, targetPath)) {
-            if(pathos.basename(targetPath) == 'lib') {
-              links.add(pathos.dirname(targetPath));
-            }
+    var packages = FileUtils.glob(appPath + "/packages/*/");
+    for (var package in packages) {
+      var link = new Link(package);
+      if (link.existsSync()) {
+        var targetPath = link.targetSync();
+        if (cacheGlob.match(targetPath)) {
+          if (FileUtils.basename(targetPath) == "lib") {
+            links.add(FileUtils.dirname(targetPath));
           }
         }
       }
     }
 
     return links;
-  }
-
-  void _findPubSpecs(String path, Set<String> passed, List<String> pubspecs) {
-    var entries = _listDirectory(path);
-    var dirs = [];
-    String pubspec = null;
-    for(var entry in entries) {
-      var entryPath = entry.path;
-      if(FileSystemEntity.isFileSync(entryPath)) {
-        if(pathos.basename(entryPath) == 'pubspec.yaml') {
-          pubspec = entryPath;
-          break;
-        }
-      }
-
-      if(FileSystemEntity.isDirectorySync(entryPath)) {
-        if(!passed.contains(entryPath)) {
-          passed.add(entryPath);
-          dirs.add(entryPath);
-        }
-      }
-    }
-
-    if(pubspec != null) {
-      if(_displayTitleFoundApplication) {
-        _displayTitle('List of found packages:');
-        _displayTitleFoundApplication = false;
-      }
-
-      pubspecs.add(pubspec);
-      stdout.writeln(path);
-    } else {
-      for(var dir in dirs) {
-        _findPubSpecs(dir, passed, pubspecs);
-      }
-    }
-  }
-
-  String _getHomePath() {
-    var home = Platform.environment['HOME'];
-    if(home != null) {
-      return pathos.normalize(home);
-    } else {
-      return null;
-    }
   }
 
   List<String> _getCachedPackages(String cachePath) {
@@ -197,82 +140,44 @@ class PubCacheCleaner {
     return results;
   }
 
-  List<String> _getDirectories(String path) {
-    var entries = _listDirectory(path);
-    var results = [];
-    for(var entry in entries) {
-      var entryPath = entry.path;
-      if(FileSystemEntity.isDirectorySync(entryPath)) {
-        results.add(entryPath);
+  List<String> _getGitPackages(String cachePath) {
+    var packages = FileUtils.glob(cachePath + "/git/*/");
+    var glob = new Glob(cachePath + "/git/cache");
+    var result = [];
+    for (var package in packages) {
+      if (!glob.match(package)) {
+        result.add(package);
       }
     }
 
-    return results;
-  }
-
-  List<String> _getGitPackages(String cachePath) {
-    var gitPath = pathos.join(cachePath, 'git');
-    var results = [];
-    results.addAll(_getDirectories(gitPath));
-    results.remove(pathos.join(gitPath, 'cache'));
-    return results;
+    return result;
   }
 
   List<String> _getHostedPackages(String cachePath) {
-    var hostedPath = pathos.join(cachePath, 'hosted');
-    var dirs = _getDirectories(hostedPath);
-    var results = [];
-    for(var dir in dirs) {
-      results.addAll(_getDirectories(pathos.normalize(dir)));
-    }
-
-    return results;
+    var packages = FileUtils.glob(cachePath + "/hosted/*/*/");
+    return packages;
   }
 
-  String _getPubCachePath(String homePath) {
-    var pubCache = Platform.environment['PUB_CACHE'];
-    if(pubCache != null) {
-      return  pathos.normalize(pubCache);
+  String _getPubCachePath() {
+    var result = Platform.environment["PUB_CACHE"];
+    if (result != null) {
+      return result;
+    }
+
+    if (Platform.isWindows) {
+      result = FilePath.expand(r"$APPDATA/Pub/Cache");
     } else {
-      return pathos.join(homePath, '.pub-cache');
-    }
-  }
-
-  bool _isSubdir(String dir, String subdir) {
-    var segments1 = pathos.split(dir);
-    var segments2 = pathos.split(subdir);
-    var length = segments1.length;
-    if(length > segments2.length) {
-      return false;
+      result = FilePath.expand("~/.pub-cache");
     }
 
-    for(var i = 0; i < length; i++) {
-      if(segments1[i] != segments2[i]) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  List<FileSystemEntity> _listDirectory(String path, {bool followLinks: false,
-    bool recursive: false}) {
-    var entries = [];
-    var dir = new Directory(path);
-    try {
-      entries = dir.listSync(followLinks: followLinks, recursive: recursive);
-    } catch(exception) {
-      return entries;
-    }
-
-    return entries;
+    return result;
   }
 
   bool _parseArguments(List<String> arguments) {
     ArgResults argumentResults;
     var parser = new ArgParser();
-    parser.addFlag('help', help: 'Display help');
-    parser.addFlag('clean', help: 'Clean cache');
+    parser.addFlag("help", help: "Display help");
+    parser.addFlag("clean", help: "Clean cache");
 
     try {
       argumentResults = parser.parse(arguments);
@@ -280,18 +185,18 @@ class PubCacheCleaner {
       stdout.writeln(exception.message);
       _printUsage(parser);
       return false;
-    } catch(e) {
-      throw(e);
+    } catch (e) {
+      throw (e);
     }
 
-    if(argumentResults != null) {
-      if(argumentResults['clean'] != null) {
-        _clean = argumentResults['clean'];
+    if (argumentResults != null) {
+      if (argumentResults["clean"] != null) {
+        _clean = argumentResults["clean"];
       }
 
-      if(argumentResults['help'] != null) {
-        _help = argumentResults['help'];
-        if(_help) {
+      if (argumentResults["help"] != null) {
+        _help = argumentResults["help"];
+        if (_help) {
           _printUsage(parser);
         }
       }
@@ -301,7 +206,7 @@ class PubCacheCleaner {
   }
 
   void _printUsage(ArgParser parser) {
-    stdout.writeln('Usage:');
+    stdout.writeln("Usage:");
     stdout.writeln(parser.getUsage());
   }
 }
