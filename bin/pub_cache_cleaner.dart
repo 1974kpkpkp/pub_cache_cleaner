@@ -109,22 +109,19 @@ class PubCacheCleaner {
   }
 
   List<String> _findLinksToPackages(String appPath, String cachePattern) {
-    var glob = new Glob(cachePattern);
     var links = [];
     var packages = FileUtils.glob(appPath + "/packages/*/");
     for (var package in packages) {
       var link = new Link(package);
       if (link.existsSync()) {
         var targetPath = link.targetSync();
-        if (glob.match(targetPath)) {
-          if (FileUtils.basename(targetPath) == "lib") {
-            links.add(FileUtils.dirname(targetPath));
-          }
+        if (FileUtils.basename(targetPath) == "lib") {
+          links.add(FileUtils.dirname(targetPath));
         }
       }
     }
 
-    return links;
+    return FileUtils.include(links, cachePattern);
   }
 
   List<String> _getCachedPackages(String cachePath) {
