@@ -1,7 +1,6 @@
 import "dart:io";
 import "package:args/args.dart";
 import "package:globbing/globbing.dart";
-import "package:globbing/glob_filter.dart";
 import "package:file_utils/file_utils.dart";
 
 void main(List<String> args) {
@@ -46,14 +45,7 @@ class PubCacheCleaner {
     }
 
     // Remove cached packages from list
-    var cacheGlob = new Glob(cachePath + "/**");
-    var applications = new List<String>();
-    for (var pubspec in pubspecs) {
-      if (!cacheGlob.match(pubspec)) {
-        applications.add(pubspec);
-      }
-    }
-
+    var applications = FileUtils.exclude(pubspecs, cachePath + "/**");
     _displayTitle("List of found applications:");
     for (var application in applications) {
       stdout.writeln(application);
@@ -62,7 +54,7 @@ class PubCacheCleaner {
     var references = new Set<String>();
     for (var application in applications) {
       var appPath = FileUtils.dirname(application);
-      references.addAll(_findLinksToPackages(appPath, cacheGlob));
+      references.addAll(_findLinksToPackages(appPath, cachePath + "/**"));
     }
 
     var cachedPackages = new Set<String>.from(_getCachedPackages(cachePath));
@@ -78,7 +70,7 @@ class PubCacheCleaner {
     }
 
     var sorted = cachedPackages.toList();
-    sorted.sort((e1, e2) => e1.compareTo(e2));
+    sorted.sort((a, b) => a.compareTo(b));
     if (!_clean) {
       _displayTitle("List of obsolete packages:");
       sorted.forEach((e) => stdout.writeln(e));
@@ -116,14 +108,15 @@ class PubCacheCleaner {
     return -1;
   }
 
-  List<String> _findLinksToPackages(String appPath, Glob cacheGlob) {
+  List<String> _findLinksToPackages(String appPath, String cachePattern) {
+    var glob = new Glob(cachePattern);
     var links = [];
     var packages = FileUtils.glob(appPath + "/packages/*/");
     for (var package in packages) {
       var link = new Link(package);
       if (link.existsSync()) {
         var targetPath = link.targetSync();
-        if (cacheGlob.match(targetPath)) {
+        if (glob.match(targetPath)) {
           if (FileUtils.basename(targetPath) == "lib") {
             links.add(FileUtils.dirname(targetPath));
           }
@@ -143,9 +136,7 @@ class PubCacheCleaner {
 
   List<String> _getGitPackages(String cachePath) {
     var packages = FileUtils.glob(cachePath + "/git/*/");
-    var filter = new GlobFilter(cachePath + "/git/cache", isDirectory: (path) =>
-        true, isWindows: Platform.isWindows);
-    return filter.exclude(packages);
+    return FileUtils.exclude(packages, cachePath + "/git/cache");
   }
 
   List<String> _getHostedPackages(String cachePath) {
