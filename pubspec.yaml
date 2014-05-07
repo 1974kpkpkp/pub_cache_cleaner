@@ -1,7 +1,7 @@
 name: pub_cache_cleaner
-version: 0.0.5
+version: 0.0.6
 author: Andrew Mezoni <andrew.mezoni@gmail.com>
-description: Utility to clean the pub cache from obsolete packages
+description: Utility to clean the pub cache from obsolete packages.
 homepage: https://github.com/mezoni/pub_cache_cleaner
 dependencies:
   args: any

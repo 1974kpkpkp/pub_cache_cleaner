@@ -1,6 +1,7 @@
 import "dart:io";
 import "package:args/args.dart";
 import "package:globbing/globbing.dart";
+import "package:globbing/glob_filter.dart";
 import "package:file_utils/file_utils.dart";
 
 void main(List<String> args) {
@@ -142,15 +143,9 @@ class PubCacheCleaner {
 
   List<String> _getGitPackages(String cachePath) {
     var packages = FileUtils.glob(cachePath + "/git/*/");
-    var glob = new Glob(cachePath + "/git/cache");
-    var result = [];
-    for (var package in packages) {
-      if (!glob.match(package)) {
-        result.add(package);
-      }
-    }
-
-    return result;
+    var filter = new GlobFilter(cachePath + "/git/cache", isDirectory: (path) =>
+        true, isWindows: Platform.isWindows);
+    return filter.exclude(packages);
   }
 
   List<String> _getHostedPackages(String cachePath) {
